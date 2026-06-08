@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { X, Activity, Share2, Eye, Check, ArrowRight, Database, Copy, Download, FileText, BookOpen, Video, ExternalLink, MessageSquare, Send, Loader } from 'lucide-react';
+import { X, Activity, Share2, Eye, Check, ArrowRight, Database, Copy, Download, FileText, BookOpen, Video, ExternalLink, MessageSquare, Send, Loader, Server, HardDrive, Power, Square } from 'lucide-react';
 
 const sectionConfig = {
   healthcare:    { color: '#10b981', bg: '#ecfdf5', text: '#065f46', tagBg: '#d1fae5', label: 'Healthcare',    gradient: 'linear-gradient(135deg, #10b981, #059669)' },
@@ -43,6 +43,169 @@ const projectResources = {
 const projectCredentials = {
   '/healthcare/health':  { username: 'Operisoft-demo', password: 'Operisoft1803@' },
   '/other/convogenai':   { username: 'sales_user@operisoft.com', password: 'Admin@123' },
+};
+
+// Which projects need a server control widget and what type
+const projectServerResource = {
+  '/healthcare/health':           { type: 'ec2',  label: 'EC2 Instance' },
+  '/healthcare/medical-assistant':{ type: 'ec2',  label: 'EC2 Instance' },
+  '/security':                    { type: 'ec2',  label: 'EC2 Instance' },
+  '/other/convogenai':            { type: 'rds',  label: 'RDS Database' },
+};
+
+const stateLabel = {
+  running:       'Running',
+  stopped:       'Stopped',
+  pending:       'Starting…',
+  stopping:      'Stopping…',
+  starting:      'Starting…',
+  available:     'Available',
+  modifying:     'Modifying',
+  'backing-up':  'Backing Up',
+  rebooting:     'Rebooting',
+  loading:       'Loading…',
+  unknown:       'Unknown',
+};
+
+const ServerControl = ({ resourceType, label, color, bg }) => {
+  const [state, setState] = useState('loading');
+  const [instanceId, setInstanceId] = useState('—');
+  const [busy, setBusy] = useState(false);
+
+  const getApiBase = () => {
+    const envUrl = process.env.REACT_APP_SERVER_CONTROL_API_URL;
+    const stored = localStorage.getItem('apiUrl') || '';
+    return (envUrl || stored).replace(/\/$/, '');
+  };
+
+  const fetchStatus = useCallback(async () => {
+    const base = getApiBase();
+    if (!base) { setState('unknown'); return; }
+    setState('loading');
+    try {
+      const res  = await fetch(`${base}/status`);
+      const data = await res.json();
+      if (!res.ok) throw new Error();
+      if (resourceType === 'ec2') {
+        setState(data.ec2?.state ?? 'unknown');
+        setInstanceId(data.ec2?.instanceId ?? '—');
+      } else {
+        setState(data.rds?.state ?? 'unknown');
+        setInstanceId(data.rds?.instanceId ?? '—');
+      }
+    } catch {
+      setState('unknown');
+    }
+  }, [resourceType]);
+
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  const handleAction = async (op) => {
+    const base = getApiBase();
+    if (!base) return;
+    setBusy(true);
+    try {
+      const res  = await fetch(`${base}/${op}/${resourceType}`, { method: 'POST' });
+      if (!res.ok) throw new Error();
+      setState(op === 'start' ? 'pending' : 'stopping');
+      setTimeout(fetchStatus, 3000);
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const normalized = state.toLowerCase().replace(/\s+/g, '-');
+  const isRunning   = ['running', 'available', 'modifying', 'backing-up', 'rebooting'].includes(normalized);
+  const isStopped   = normalized === 'stopped';
+  const inProgress  = ['pending', 'starting', 'stopping'].includes(normalized);
+  const isLoading   = ['loading', 'unknown'].includes(normalized);
+
+  const statusColor =
+    isRunning  ? '#22c55e' :
+    isStopped  ? '#ef4444' :
+    inProgress ? '#f59e0b' :
+    '#94a3b8';
+
+  const StatusDot = () => (
+    <span className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+      style={{ background: statusColor, boxShadow: isRunning ? `0 0 6px ${statusColor}` : 'none' }} />
+  );
+
+  const Icon = resourceType === 'ec2' ? Server : HardDrive;
+
+  return (
+    <div className="rounded-xl border p-3.5" style={{ background: bg, borderColor: `${color}33` }}>
+      <div className="flex items-center justify-between gap-3">
+        {/* Left: icon + label + status */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: `${color}22` }}>
+            <Icon className="w-4 h-4" style={{ color }} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-bold leading-none" style={{ color }}>
+              {label}
+            </p>
+            <p className="text-xs text-gray-400 mt-0.5 truncate">{instanceId}</p>
+          </div>
+        </div>
+
+        {/* Middle: status badge */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {isLoading
+            ? <Loader className="w-3 h-3 animate-spin text-gray-400" />
+            : <StatusDot />
+          }
+          <span className="text-xs font-semibold" style={{ color: isLoading ? '#94a3b8' : statusColor }}>
+            {stateLabel[normalized] ?? state}
+          </span>
+        </div>
+
+        {/* Right: Start / Stop buttons */}
+        <div className="flex gap-1.5 flex-shrink-0">
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            disabled={isRunning || inProgress || isLoading || busy}
+            onClick={() => handleAction('start')}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: '#14532d22', color: '#16a34a', border: '1px solid #16a34a44' }}
+            title="Start"
+          >
+            <Power className="w-3 h-3" /> Start
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            disabled={isStopped || inProgress || isLoading || busy}
+            onClick={() => handleAction('stop')}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: '#7f1d1d22', color: '#dc2626', border: '1px solid #dc262644' }}
+            title="Stop"
+          >
+            <Square className="w-3 h-3" /> Stop
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            disabled={busy}
+            onClick={fetchStatus}
+            className="p-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+            style={{ background: `${color}15`, color, border: `1px solid ${color}33` }}
+            title="Refresh status"
+          >
+            <svg className={busy ? 'animate-spin' : ''} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.36-3.36L23 10M1 14l5.13 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </motion.button>
+        </div>
+      </div>
+
+      {!getApiBase() && (
+        <p className="text-xs text-amber-500 mt-2">⚠ Set your API Gateway URL in the Server tab to enable controls.</p>
+      )}
+    </div>
+  );
 };
 
 const CredentialField = ({ label, value, color }) => {
@@ -315,6 +478,7 @@ const ProjectModal = ({ project, onClose }) => {
   const source = inputSources[project.url];
   const resources = projectResources[project.url];
   const credentials = projectCredentials[project.url];
+  const serverResource = projectServerResource[project.url];
 
   const handleAccess = () => { navigate(project.url); onClose(); };
   const handleShare = () => {
@@ -372,6 +536,18 @@ const ProjectModal = ({ project, onClose }) => {
                 ))}
               </div>
             </div>
+
+            {serverResource && (
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Server Control</p>
+                <ServerControl
+                  resourceType={serverResource.type}
+                  label={serverResource.label}
+                  color={cfg.color}
+                  bg={cfg.bg}
+                />
+              </div>
+            )}
 
             <AnimatePresence>
               {showPreview && project.previewImages?.length > 0 && (
