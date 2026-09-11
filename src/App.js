@@ -13,7 +13,6 @@ import MedicalAssistant from './projects/healthcare/MedicalAssistant/MedicalAssi
 import Health from './projects/healthcare/Health/Health';
 import SmartPolicy from './projects/transportation/SmartPolicy/SmartPolicy';
 import Security from './projects/Security/Security';
-import ImmigrationInfo from './projects/Education/Immigration/immigrationinfo';
 import VoiceBot from './projects/other/VoiceBot/VoiceBot';
 import SmartDocuments from './projects/Education/SmartDocuments/SmartDocuments';
 
@@ -51,7 +50,6 @@ function App() {
                   <Route path="/healthcare/health" element={<Health />} />
                   <Route path="/Education/smart-documents" element={<SmartDocuments />} />
                   <Route path="/other/recruiterai" element={<RecruiterAI />} />
-                  <Route path="/Education/immigration" element={<ImmigrationInfo />} />
                   <Route path="/other/voicebot" element={<VoiceBot />} />
                   <Route path="/transportation/smart-policy" element={<SmartPolicy />} />
                   <Route path="/security" element={<Security />} />
