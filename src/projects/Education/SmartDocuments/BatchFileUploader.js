@@ -1,68 +1,87 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './BatchFileUploader.css';
 
+const API_BASE_URL = `${process.env.REACT_APP_SMART_DOCS_API_URL || 'https://1apxtau0t6.execute-api.ap-south-1.amazonaws.com/dev'}/application`;
+const UPLOAD_API_URL = `${process.env.REACT_APP_SMART_DOCS_API_URL || 'https://1apxtau0t6.execute-api.ap-south-1.amazonaws.com/dev'}/upload`;
+
 const BatchFileUploader = ({ actorId }) => {
-  const [files, setFiles] = useState([]);
-  const [sessionId] = useState(`sess_${Date.now()}`);
-  const [status, setStatus] = useState('');
+  const [files, setFiles]             = useState([]);
+  const [sessionId]                   = useState(`sess_${Date.now()}`);
+  const [status, setStatus]           = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
+  // Intake selection
+  const [intakes, setIntakes]         = useState([]);
+  const [selectedIntake, setSelectedIntake] = useState('');
+  const [loadingIntakes, setLoadingIntakes] = useState(true);
+
+  useEffect(() => {
+    const fetchIntakes = async () => {
+      try {
+        const res  = await fetch(`${API_BASE_URL}/api/intakes?status=ACTIVE`);
+        const data = await res.json();
+        setIntakes(data.intakes || []);
+      } catch (e) {
+        console.error('Failed to load intakes', e);
+      } finally {
+        setLoadingIntakes(false);
+      }
+    };
+    fetchIntakes();
+  }, []);
+
   const onFileChange = (e) => {
-    const selectedFiles = Array.from(e.target.files);
-    setFiles(selectedFiles);
+    setFiles(Array.from(e.target.files));
     setStatus('');
   };
 
-  const removeFile = (index) => {
-    const updatedFiles = files.filter((_, i) => i !== index);
-    setFiles(updatedFiles);
-  };
+  const removeFile = (index) => setFiles(files.filter((_, i) => i !== index));
 
   const startUpload = async () => {
+    if (!selectedIntake) {
+      alert('Please select an intake before uploading.');
+      return;
+    }
     if (files.length === 0) {
-      alert("Please select files first!");
+      alert('Please select files first!');
       return;
     }
 
     setIsUploading(true);
-    setStatus(`Getting permission for ${files.length} files...`);
+    setStatus(`Getting upload permissions for ${files.length} files...`);
     setUploadProgress(0);
 
     try {
-      // 1. Trigger API Gateway (Lambda 1) to register session and get URLs
-      const response = await fetch(`${process.env.REACT_APP_SMART_DOCS_API_URL || 'https://1apxtau0t6.execute-api.ap-south-1.amazonaws.com/dev'}/upload`, {
+      const response = await fetch(UPLOAD_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           actor_id: actorId,
           session_id: sessionId,
-          file_names: files.map(f => f.name)
-        })
+          intake_id: selectedIntake,
+          file_names: files.map(f => f.name),
+        }),
       });
 
       const { uploadUrls } = await response.json();
-      // console.log(uploadUrls)
-    
 
-      // 2. Perform Parallel Uploads directly to S3
-      setStatus(`Uploading ${files.length} files to S3 in parallel...`);
-      
-      const uploadPromises = files.map((file, index) => {
-        return fetch(uploadUrls[index], {
-          method: 'PUT',
-          body: file,
-          headers: { 'Content-Type': 'application/pdf' }
-        });
-      });
+      setStatus(`Uploading ${files.length} files...`);
+      await Promise.all(
+        files.map((file, i) =>
+          fetch(uploadUrls[i], {
+            method: 'PUT',
+            body: file,
+            headers: { 'Content-Type': 'application/pdf' },
+          })
+        )
+      );
 
-      await Promise.all(uploadPromises);
       setUploadProgress(100);
-      setStatus(`Success! All ${files.length} files uploaded to S3. Textract processing started.`);
-      
+      const intakeName = intakes.find(i => i.intake_id === selectedIntake)?.name || selectedIntake;
+      setStatus(`✅ All ${files.length} files uploaded for intake "${intakeName}". Processing started.`);
     } catch (err) {
-      // console.error(err);
-      setStatus('Upload failed. Please try again.');
+      setStatus('❌ Upload failed. Please try again.');
     } finally {
       setIsUploading(false);
     }
@@ -83,16 +102,47 @@ const BatchFileUploader = ({ actorId }) => {
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
             <polyline points="14,2 14,8 20,8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-            <polyline points="10,9 9,9 8,9"/>
           </svg>
         </div>
         <h2>Document Upload Center</h2>
-        <p>Upload multiple PDF documents for automated processing and analysis</p>
+        <p>Upload PDF documents for automated processing and analysis</p>
       </div>
 
+      {/* Step 1: Select Intake */}
+      <div className="intake-selector-section">
+        <h3 className="step-label">Step 1 — Select Admission Intake</h3>
+        {loadingIntakes ? (
+          <p className="loading-text">Loading active intakes...</p>
+        ) : intakes.length === 0 ? (
+          <div className="no-intakes-warning">
+            ⚠️ No active intake available. An admin needs to create an intake from the <strong>Intakes</strong> tab before documents can be uploaded.
+          </div>
+        ) : (
+          <div className="intake-cards-row">
+            {intakes.map(intake => (
+              <div
+                key={intake.intake_id}
+                className={`intake-select-card ${selectedIntake === intake.intake_id ? 'selected' : ''}`}
+                onClick={() => setSelectedIntake(intake.intake_id)}
+              >
+                <div className="intake-select-name">{intake.name}</div>
+                <div className="intake-select-program">{intake.program}</div>
+                {intake.deadline && (
+                  <div className="intake-select-deadline">
+                    🗓 {new Date(intake.deadline).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </div>
+                )}
+                {selectedIntake === intake.intake_id && <div className="intake-selected-tick">✓</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Step 2: Select Files — only show when an intake is selected */}
+      {selectedIntake && (
       <div className="upload-section">
+        <h3 className="step-label">Step 2 — Select Documents</h3>
         <div className="file-input-wrapper">
           <input
             type="file"
@@ -105,9 +155,9 @@ const BatchFileUploader = ({ actorId }) => {
           />
           <label htmlFor="file-upload" className="file-input-label">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7,10 12,15 17,10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7,10 12,15 17,10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             Choose PDF Files
           </label>
@@ -122,13 +172,7 @@ const BatchFileUploader = ({ actorId }) => {
                   <span className="file-name">{file.name}</span>
                   <span className="file-size">{formatFileSize(file.size)}</span>
                 </div>
-                <button
-                  onClick={() => removeFile(index)}
-                  className="remove-btn"
-                  disabled={isUploading}
-                >
-                  ×
-                </button>
+                <button onClick={() => removeFile(index)} className="remove-btn" disabled={isUploading}>×</button>
               </div>
             ))}
           </div>
@@ -139,12 +183,13 @@ const BatchFileUploader = ({ actorId }) => {
           disabled={files.length === 0 || isUploading}
           className="upload-btn"
         >
-          {isUploading ? 'Uploading...' : `Upload ${files.length} Files`}
+          {isUploading ? 'Uploading...' : `Upload ${files.length} File${files.length !== 1 ? 's' : ''}`}
         </button>
       </div>
+      )}
 
       {status && (
-        <div className={`status-section ${status.includes('Success') ? 'success' : status.includes('failed') ? 'error' : 'info'}`}>
+        <div className={`status-section ${status.includes('✅') ? 'success' : status.includes('❌') ? 'error' : 'info'}`}>
           <p>{status}</p>
           {isUploading && (
             <div className="progress-bar">

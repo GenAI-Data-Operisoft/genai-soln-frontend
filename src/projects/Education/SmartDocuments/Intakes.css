@@ -1,0 +1,145 @@
+.intakes-page { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+.intakes-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 28px;
+}
+.intakes-header h1 { font-size: 1.8rem; font-weight: 700; color: #1e293b; margin: 0 0 4px; }
+.intakes-header p  { color: #64748b; margin: 0; }
+
+.create-intake-btn {
+  background: #4f46e5; color: #fff; border: none; border-radius: 8px;
+  padding: 10px 20px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
+  transition: background 0.2s;
+}
+.create-intake-btn:hover { background: #4338ca; }
+
+/* Form card */
+.intake-form-card {
+  background: #fff; border-radius: 12px; padding: 28px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.08); margin-bottom: 28px;
+}
+.intake-form-card h2 { font-size: 1.2rem; font-weight: 700; margin: 0 0 20px; color: #1e293b; }
+
+.intake-form .form-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;
+}
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group.full-width { margin-bottom: 16px; }
+.form-group label { font-size: 0.85rem; font-weight: 600; color: #374151; }
+.form-group input, .form-group select, .form-group textarea {
+  padding: 10px 12px; border: 1.5px solid #e2e8f0; border-radius: 8px;
+  font-size: 0.9rem; outline: none; transition: border-color 0.2s;
+}
+.form-group input:focus, .form-group select:focus { border-color: #4f46e5; }
+
+.docs-checkbox-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px; padding: 14px; background: #f8fafc; border-radius: 8px; border: 1.5px solid #e2e8f0;
+}
+.doc-checkbox-label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.88rem; color: #374151; cursor: pointer; padding: 4px 0;
+}
+.doc-checkbox-label input { accent-color: #4f46e5; cursor: pointer; width: 15px; height: 15px; }
+
+.form-actions { display: flex; gap: 12px; margin-top: 20px; }
+.submit-btn {
+  background: #4f46e5; color: #fff; border: none; border-radius: 8px;
+  padding: 10px 24px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
+}
+.submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.cancel-btn {
+  background: #f1f5f9; color: #374151; border: none; border-radius: 8px;
+  padding: 10px 20px; font-size: 0.95rem; cursor: pointer;
+}
+
+/* Intakes grid */
+.intakes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
+
+.intake-card {
+  background: #fff; border-radius: 12px; padding: 20px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.07); border: 1.5px solid #e2e8f0;
+  cursor: pointer; transition: box-shadow 0.2s, border-color 0.2s;
+}
+.intake-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.12); border-color: #c7d2fe; }
+
+.intake-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.intake-card-header h3 { font-size: 1rem; font-weight: 700; color: #1e293b; margin: 0 0 4px; }
+.intake-program { font-size: 0.78rem; color: #64748b; margin: 0; line-height: 1.4; }
+
+.intake-status-badge {
+  color: #fff; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+  white-space: nowrap;
+}
+
+.intake-stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.intake-stat { text-align: center; padding: 10px 4px; border-radius: 8px; }
+.intake-stat.approved { background: #ecfdf5; }
+.intake-stat.rejected { background: #fef2f2; }
+.intake-stat.pending  { background: #fffbeb; }
+.intake-stat.total    { background: #f0f9ff; }
+.stat-num { display: block; font-size: 1.3rem; font-weight: 700; color: #1e293b; }
+.stat-lbl { font-size: 0.72rem; color: #64748b; }
+
+.intake-deadline { font-size: 0.82rem; color: #64748b; margin-top: 4px; }
+
+.intake-expanded {
+  margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0;
+}
+.intake-docs strong { font-size: 0.85rem; color: #374151; }
+.intake-docs ul { margin: 8px 0 12px; padding-left: 4px; list-style: none; }
+.intake-docs li { font-size: 0.83rem; color: #374151; padding: 2px 0; }
+.intake-description { font-size: 0.85rem; color: #64748b; margin-bottom: 12px; }
+
+.intake-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+.toggle-status-btn {
+  border: none; border-radius: 6px; padding: 8px 16px; font-size: 0.85rem;
+  font-weight: 600; cursor: pointer;
+}
+.close-btn { background: #fef2f2; color: #ef4444; }
+.open-btn  { background: #ecfdf5; color: #10b981; }
+.intake-id-label { font-size: 0.72rem; color: #94a3b8; }
+
+.no-intakes {
+  text-align: center; padding: 60px 20px; color: #64748b;
+}
+.no-intakes-icon { font-size: 3rem; margin-bottom: 12px; }
+.no-intakes h3 { font-size: 1.1rem; margin: 0 0 6px; color: #374151; }
+.intakes-loading { display: flex; align-items: center; gap: 12px; padding: 40px; justify-content: center; color: #64748b; }
+
+@media (max-width: 640px) {
+  .intake-form .form-row { grid-template-columns: 1fr; }
+  .intakes-grid { grid-template-columns: 1fr; }
+  .intakes-header { flex-direction: column; gap: 12px; }
+}
+
+/* Required documents on intake card */
+.intake-required-docs {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+.req-docs-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: block;
+  margin-bottom: 8px;
+}
+.req-docs-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.req-doc-tag {
+  background: #f1f5f9;
+  color: #374151;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  white-space: nowrap;
+}

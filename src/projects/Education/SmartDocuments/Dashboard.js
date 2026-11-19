@@ -1,169 +1,322 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './Dashboard.css';
 
-const Dashboard = () => {
-  const [dashboardData, setDashboardData] = useState(null);
-  const [applications, setApplications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [filterRecommendation, setFilterRecommendation] = useState('all');
-  
-  // Modal states
-  const [selectedApplication, setSelectedApplication] = useState(null);
-  const [selectedApplicationJSON, setSelectedApplicationJSON] = useState(null);
-  const [selectedMissingDocs, setSelectedMissingDocs] = useState(null);
-  const [selectedValidationResults, setSelectedValidationResults] = useState(null);
+const API_BASE = `${process.env.REACT_APP_SMART_DOCS_API_URL || 'https://1apxtau0t6.execute-api.ap-south-1.amazonaws.com/dev'}/application`;
 
-  // API Configuration
-  const API_BASE_URL = `${process.env.REACT_APP_SMART_DOCS_API_URL || 'https://1apxtau0t6.execute-api.ap-south-1.amazonaws.com/dev'}/application`;
-  
-  const fetchDashboardData = React.useCallback(async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/dashboard/stats`);
-      const data = await response.json();
-      setDashboardData(data);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    }
-  }, [API_BASE_URL]);
+// ─── helpers ────────────────────────────────────────────────────────────────
+const statusColor = s => ({ ELIGIBLE: '#10b981', NOT_ELIGIBLE: '#ef4444', PENDING: '#f59e0b' }[s] || '#6b7280');
+const recColor    = r => ({ APPROVE: '#10b981', HOLD_FOR_VERIFICATION: '#f59e0b', REVIEW_REQUIRED: '#3b82f6', REJECT: '#ef4444' }[r] || '#6b7280');
+const fmtDate     = d => new Date(d).toLocaleDateString('en-IN', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+const severityColor = s => ({ HIGH: '#ef4444', MEDIUM: '#f59e0b', LOW: '#10b981' }[s] || '#6b7280');
 
-  const fetchApplications = React.useCallback(async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams({
-        limit: 100,
-        status: filterStatus,
-        recommendation: filterRecommendation
-      });
-      
-      const response = await fetch(`${API_BASE_URL}/api/applications?${params}`);
-      const data = await response.json();
-      setApplications(data.applications || []);
-    } catch (error) {
-      console.error('Error fetching applications:', error);
-      setApplications([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [API_BASE_URL, filterStatus, filterRecommendation]);
+// ─── Admin Decision Modal ────────────────────────────────────────────────────
+const DecisionModal = ({ app, onClose, onSaved }) => {
+  const [decision, setDecision]       = useState('');
+  const [comment, setComment]         = useState('');
+  const [rejReasons, setRejReasons]   = useState([]);
+  const [discrepancies, setDisc]      = useState([]);
+  const [saving, setSaving]           = useState(false);
 
   useEffect(() => {
-    fetchDashboardData();
-    fetchApplications();
-  }, [fetchDashboardData, fetchApplications]);
+    // Load discrepancies to offer as pre-filled rejection reasons
+    fetch(`${API_BASE}/api/applications/${app.actor_id}/${app.session_id}/validation-results`)
+      .then(r => r.json())
+      .then(d => setDisc(d.discrepancies || []))
+      .catch(() => {});
+  }, [app]);
 
-  const fetchApplicationDetails = async (actorId, sessionId) => {
+  const toggleReason = (desc) =>
+    setRejReasons(r => r.includes(desc) ? r.filter(x => x !== desc) : [...r, desc]);
+
+  const submit = async () => {
+    if (!decision) { alert('Please select Approve or Reject.'); return; }
+    if (decision === 'REJECTED' && rejReasons.length === 0 && !comment.trim()) {
+      alert('Please provide at least one rejection reason or comment.'); return;
+    }
+    setSaving(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/applications/${actorId}/${sessionId}`);
-      const data = await response.json();
-      setSelectedApplication(data);
-    } catch (error) {
-      console.error('Error fetching application details:', error);
-      alert('Error loading application details');
+      const res = await fetch(`${API_BASE}/api/applications/${app.actor_id}/${app.session_id}/decision`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision, reasons: rejReasons, admin_notes: comment }),
+      });
+      if (!res.ok) throw new Error('Failed to save decision');
+      onSaved();
+      onClose();
+    } catch (e) {
+      alert('Error saving decision: ' + e.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const viewApplicationJSON = async (actorId, sessionId) => {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content decision-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>⚖️ Admin Decision</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="decision-applicant-info">
+            <strong>{app.applicant_name}</strong>
+            <span>{app.application_number} · {app.program}</span>
+            <span>AI Recommendation: <span className="rec-badge" style={{ background: recColor(app.final_recommendation) }}>{app.final_recommendation}</span></span>
+          </div>
+
+          <div className="decision-buttons">
+            <button
+              className={`decision-btn approve-btn ${decision === 'APPROVED' ? 'selected' : ''}`}
+              onClick={() => setDecision('APPROVED')}
+            >✅ Approve</button>
+            <button
+              className={`decision-btn reject-btn ${decision === 'REJECTED' ? 'selected' : ''}`}
+              onClick={() => setDecision('REJECTED')}
+            >❌ Reject</button>
+          </div>
+
+          {decision === 'REJECTED' && discrepancies.length > 0 && (
+            <div className="rejection-reasons">
+              <label className="reasons-label">Select rejection reasons (from validation issues):</label>
+              {discrepancies.map((d, i) => (
+                <label key={i} className="reason-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={rejReasons.includes(d.description || d.field)}
+                    onChange={() => toggleReason(d.description || d.field)}
+                  />
+                  <span>
+                    <strong style={{ color: severityColor(d.severity) }}>[{d.severity}]</strong>{' '}
+                    {d.field}: {d.description}
+                    {d.source_document && <em> ({d.source_document})</em>}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          <div className="comment-section">
+            <label className="comment-label">
+              {decision === 'REJECTED' ? 'Additional comments (included in rejection email):' : 'Notes (optional):'}
+            </label>
+            <textarea
+              rows={4}
+              className="comment-textarea"
+              placeholder={decision === 'REJECTED' ? 'Explain rejection reasons, next steps...' : 'Optional admin notes...'}
+              value={comment}
+              onChange={e => setComment(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="submit-decision-btn" onClick={submit} disabled={saving || !decision}>
+            {saving ? 'Saving...' : 'Confirm Decision'}
+          </button>
+          <button className="cancel-decision-btn" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Validation Modal ────────────────────────────────────────────────────────
+const ValidationModal = ({ app, data, onClose }) => (
+  <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-content validation-results-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-header">
+        <h2>✓ Validation Results</h2>
+        <button className="modal-close" onClick={onClose}>×</button>
+      </div>
+      <div className="modal-body">
+        <div className="validation-summary-grid">
+          <div className="summary-item">
+            <span className="summary-label">Overall Status:</span>
+            <span className={`summary-value ${data.overall_status?.toLowerCase()}`}>{data.overall_status}</span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">Matches:</span>
+            <span className="summary-value matches">{data.matches?.length || 0}</span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">Discrepancies:</span>
+            <span className="summary-value discrepancies">{data.discrepancies?.length || 0}</span>
+          </div>
+        </div>
+
+        {/* AI Recommendation Reason */}
+        {data.overall_recommendation?.reason && (
+          <div className="reason-block-modal rec-reason-modal">
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+              <span>🤖 <strong>AI Recommendation:</strong></span>
+              <span style={{color: data.overall_recommendation.recommendation === 'APPROVE' ? '#16a34a' : data.overall_recommendation.recommendation === 'REJECT' ? '#dc2626' : '#d97706', fontWeight:700}}>
+                {data.overall_recommendation.recommendation}
+              </span>
+              <span style={{fontSize:'0.75rem',color:'#94a3b8'}}>({data.overall_recommendation.confidence} confidence)</span>
+            </div>
+            <p style={{margin:'0 0 6px',fontSize:'0.88rem',color:'#374151'}}>{data.overall_recommendation.reason}</p>
+            {data.overall_recommendation.action_required && (
+              <p style={{margin:0,fontSize:'0.82rem',color:'#64748b'}}>📌 {data.overall_recommendation.action_required}</p>
+            )}
+          </div>
+        )}
+
+        {/* Eligibility Reasons */}
+        {data.eligibility_results && (
+          <div className={`reason-block-modal ${data.eligibility_results.eligible ? 'elig-pass-modal' : 'elig-fail-modal'}`}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
+              <span>{data.eligibility_results.eligible ? '✅' : '❌'} <strong>Eligibility:</strong></span>
+              <span style={{color: data.eligibility_results.eligible ? '#16a34a' : '#dc2626', fontWeight:700}}>
+                {data.eligibility_results.eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}
+              </span>
+            </div>
+            {data.eligibility_results.requirements_met?.map((r,i) => (
+              <div key={i} style={{fontSize:'0.82rem',color:'#16a34a',padding:'2px 0'}}>✅ {r}</div>
+            ))}
+            {data.eligibility_results.requirements_not_met?.map((r,i) => (
+              <div key={i} style={{fontSize:'0.82rem',color:'#dc2626',padding:'2px 0'}}>❌ {r}</div>
+            ))}
+            {data.eligibility_results.warnings?.map((r,i) => (
+              <div key={i} style={{fontSize:'0.82rem',color:'#d97706',padding:'2px 0'}}>⚠️ {r}</div>
+            ))}
+          </div>
+        )}
+
+        {data.discrepancies?.length > 0 && (
+          <div className="validation-section discrepancies-section">
+            <h3>❌ Document Discrepancies</h3>
+            {data.discrepancies.map((d, i) => (
+              <div key={i} className="validation-item discrepancy-item">
+                <div className="validation-item-header">
+                  <strong>{d.field}</strong>
+                  <span className="severity-badge" style={{ background: severityColor(d.severity) }}>{d.severity}</span>
+                  {d.source_document && <span className="source-doc-badge">📄 {d.source_document}</span>}
+                </div>
+                <div className="value-row">
+                  <span className="value-label">Application:</span>
+                  <span className="value-text app-value">{String(d.application_value)}</span>
+                </div>
+                <div className="value-row">
+                  <span className="value-label">Document:</span>
+                  <span className="value-text doc-value">{String(d.document_value)}</span>
+                </div>
+                {d.description && <p className="disc-description">{d.description}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {data.matches?.length > 0 && (
+          <div className="validation-section matches-section">
+            <h3>✅ Matches ({data.matches.length})</h3>
+            {data.matches.map((m, i) => (
+              <div key={i} className="validation-item match-item">
+                <div className="validation-item-header">
+                  <strong>{m.field}</strong>
+                  {m.source_document && <span className="source-doc-badge">📄 {m.source_document}</span>}
+                </div>
+                <div className="value-row">
+                  <span className="value-label">Application:</span>
+                  <span className="value-text">{String(m.application_value)}</span>
+                </div>
+                <div className="value-row">
+                  <span className="value-label">Document:</span>
+                  <span className="value-text">{String(m.document_value)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+// ─── Main Dashboard ──────────────────────────────────────────────────────────
+const Dashboard = ({ onDecision }) => {
+  const [dashboardData, setDashboardData] = useState(null);
+  const [applications, setApplications]   = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [searchTerm, setSearchTerm]       = useState('');
+  const [filterStatus, setFilterStatus]           = useState('all');
+  const [filterRecommendation, setFilterRecommendation] = useState('all');
+
+  // Modals
+  const [detailApp,     setDetailApp]     = useState(null);
+  const [jsonApp,       setJsonApp]       = useState(null);
+  const [missingApp,    setMissingApp]    = useState(null);
+  const [validateApp,   setValidateApp]   = useState(null);
+  const [decisionApp,   setDecisionApp]   = useState(null);
+
+  const fetchDashboard = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/applications/${actorId}/${sessionId}`);
-      const data = await response.json();
-      setSelectedApplicationJSON(data);
-    } catch (error) {
-      console.error('Error fetching application JSON:', error);
-      alert('Error loading application JSON');
-    }
-  };
+      const res  = await fetch(`${API_BASE}/api/dashboard/stats`);
+      const data = await res.json();
+      setDashboardData(data);
+    } catch (e) { console.error(e); }
+  }, []);
 
-  const viewMissingDocuments = async (actorId, sessionId) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/applications/${actorId}/${sessionId}/missing-docs`);
-      const data = await response.json();
-      setSelectedMissingDocs(data);
-    } catch (error) {
-      console.error('Error fetching missing documents:', error);
-      alert('Error loading missing documents');
-    }
-  };
-
-  const viewValidationResults = async (actorId, sessionId) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/applications/${actorId}/${sessionId}/validation-results`);
-      const data = await response.json();
-      setSelectedValidationResults(data);
-    } catch (error) {
-      console.error('Error fetching validation results:', error);
-      alert('Error loading validation results');
-    }
-  };
-
-  const searchApplications = async () => {
-    if (!searchTerm.trim()) {
-      fetchApplications();
-      return;
-    }
-
+  const fetchApplications = useCallback(async (name = '', appNum = '') => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/applications/search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: searchTerm,
-          application_number: searchTerm,
-          eligibility_status: filterStatus !== 'all' ? filterStatus.toUpperCase() : '',
-          recommendation: filterRecommendation !== 'all' ? filterRecommendation.toUpperCase() : ''
-        })
-      });
-      
-      const data = await response.json();
-      setApplications(data.results || []);
-    } catch (error) {
-      console.error('Error searching applications:', error);
-    } finally {
-      setLoading(false);
+      const params = new URLSearchParams({ limit: 100, status: filterStatus, recommendation: filterRecommendation });
+      if (name)   params.set('name', name);
+      if (appNum) params.set('application_number', appNum);
+      const res  = await fetch(`${API_BASE}/api/applications?${params}`);
+      const data = await res.json();
+      setApplications(data.applications || []);
+    } catch (e) {
+      console.error(e); setApplications([]);
+    } finally { setLoading(false); }
+  }, [filterStatus, filterRecommendation]);
+
+  useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
+  useEffect(() => { fetchApplications(); }, [fetchApplications]);
+
+  const handleSearch = () => {
+    // Detect if the search term looks like an application number (starts with letters+digits)
+    const looksLikeAppNum = /^[A-Za-z]{1,4}\d/i.test(searchTerm.trim());
+    if (looksLikeAppNum) {
+      fetchApplications('', searchTerm.trim());
+    } else {
+      fetchApplications(searchTerm.trim(), '');
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'ELIGIBLE': return '#10b981';
-      case 'NOT_ELIGIBLE': return '#ef4444';
-      case 'PENDING': return '#f59e0b';
-      default: return '#6b7280';
-    }
+  // Card click → apply filter
+  const handleCardClick = (statusF, recF) => {
+    if (statusF)  setFilterStatus(statusF);
+    if (recF)     setFilterRecommendation(recF);
   };
 
-  const getRecommendationColor = (recommendation) => {
-    switch (recommendation) {
-      case 'APPROVE': return '#10b981';
-      case 'HOLD_FOR_VERIFICATION': return '#f59e0b';
-      case 'REVIEW_REQUIRED': return '#3b82f6';
-      case 'REJECT': return '#ef4444';
-      default: return '#6b7280';
-    }
+  // Load modal data
+  const loadDetail = async (app) => {
+    const res  = await fetch(`${API_BASE}/api/applications/${app.actor_id}/${app.session_id}`);
+    const data = await res.json();
+    setDetailApp({ app, data });
+  };
+  const loadJson = async (app) => {
+    const res  = await fetch(`${API_BASE}/api/applications/${app.actor_id}/${app.session_id}`);
+    const data = await res.json();
+    setJsonApp({ app, data });
+  };
+  const loadMissing = async (app) => {
+    const res  = await fetch(`${API_BASE}/api/applications/${app.actor_id}/${app.session_id}/missing-docs`);
+    const data = await res.json();
+    setMissingApp({ app, data });
+  };
+  const loadValidation = async (app) => {
+    const res  = await fetch(`${API_BASE}/api/applications/${app.actor_id}/${app.session_id}/validation-results`);
+    const data = await res.json();
+    setValidateApp({ app, data });
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  const adminDecision = (app) => setDecisionApp(app);
 
-  if (loading && !dashboardData) {
-    return (
-      <div className="dashboard-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading dashboard...</p>
-      </div>
-    );
-  }
+  if (loading && !dashboardData) return (
+    <div className="dashboard-loading"><div className="loading-spinner"/><p>Loading dashboard...</p></div>
+  );
+
+  const ov = dashboardData?.overview || {};
 
   return (
     <div className="dashboard">
@@ -172,78 +325,64 @@ const Dashboard = () => {
         <p>Real-time application processing and validation status</p>
       </div>
 
-      {/* Statistics Cards */}
+      {/* Stats cards — clickable to filter, now shows admin decision stats */}
       {dashboardData && (
         <div className="stats-grid">
-          <div className="stat-card">
+          <div className="stat-card clickable" title="Show all" onClick={() => handleCardClick('all', 'all')}>
             <div className="stat-icon">📊</div>
             <div className="stat-content">
-              <h3>{dashboardData.overview.total_applications}</h3>
+              <h3>{ov.total_applications || 0}</h3>
               <p>Total Applications</p>
             </div>
           </div>
-          
-          <div className="stat-card eligible">
+          <div className="stat-card eligible clickable" title="Filter eligible" onClick={() => handleCardClick('eligible', 'all')}>
             <div className="stat-icon">✅</div>
             <div className="stat-content">
-              <h3>{dashboardData.overview.eligible_applications}</h3>
-              <p>Eligible Applications</p>
-              <span className="stat-percentage">{dashboardData.overview.eligibility_rate}%</span>
+              <h3>{ov.eligible_applications || 0}</h3>
+              <p>Eligible</p>
+              <span className="stat-percentage">{ov.eligibility_rate || 0}%</span>
             </div>
           </div>
-          
-          <div className="stat-card approved">
+          <div className="stat-card approved clickable" title="Filter admin approved" onClick={() => handleCardClick('all', 'all')}>
             <div className="stat-icon">🎓</div>
             <div className="stat-content">
-              <h3>{dashboardData.overview.approved_applications}</h3>
-              <p>Approved</p>
-              <span className="stat-percentage">{dashboardData.overview.approval_rate}%</span>
+              <h3>{ov.admin_approved || 0}</h3>
+              <p>Admin Approved</p>
             </div>
           </div>
-          
-          <div className="stat-card pending">
+          <div className="stat-card pending clickable" title="Pending admin review" onClick={() => handleCardClick('all', 'all')}>
             <div className="stat-icon">⏳</div>
             <div className="stat-content">
-              <h3>{dashboardData.overview.hold_for_verification + dashboardData.overview.review_required}</h3>
+              <h3>{ov.admin_pending || 0}</h3>
               <p>Pending Review</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Search and Filters */}
+      {/* Search + Filters */}
       <div className="dashboard-controls">
         <div className="search-section">
           <input
             type="text"
             placeholder="Search by name or application number..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && searchApplications()}
+            onChange={e => setSearchTerm(e.target.value)}
+            onKeyPress={e => e.key === 'Enter' && handleSearch()}
             className="search-input"
           />
-          <button onClick={searchApplications} className="search-btn">
-            🔍 Search
-          </button>
+          <button onClick={handleSearch} className="search-btn">🔍 Search</button>
+          {searchTerm && (
+            <button className="clear-search-btn" onClick={() => { setSearchTerm(''); fetchApplications(); }}>✕</button>
+          )}
         </div>
-        
         <div className="filter-section">
-          <select 
-            value={filterStatus} 
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="filter-select"
-          >
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="filter-select">
             <option value="all">All Status</option>
             <option value="eligible">Eligible</option>
             <option value="not_eligible">Not Eligible</option>
-            <option value="pending">Pending</option>
           </select>
-          
-          <select 
-            value={filterRecommendation} 
-            onChange={(e) => setFilterRecommendation(e.target.value)}
-            className="filter-select"
-          >
+          <select value={filterRecommendation} onChange={e => setFilterRecommendation(e.target.value)} className="filter-select">
             <option value="all">All Recommendations</option>
             <option value="approve">Approved</option>
             <option value="hold">Hold for Verification</option>
@@ -256,12 +395,8 @@ const Dashboard = () => {
       {/* Applications Table */}
       <div className="applications-section">
         <h2>Applications ({applications.length})</h2>
-        
         {loading ? (
-          <div className="table-loading">
-            <div className="loading-spinner"></div>
-            <p>Loading applications...</p>
-          </div>
+          <div className="table-loading"><div className="loading-spinner"/><p>Loading...</p></div>
         ) : (
           <div className="applications-table-container">
             <table className="applications-table">
@@ -271,40 +406,40 @@ const Dashboard = () => {
                   <th>Application #</th>
                   <th>Program</th>
                   <th>Eligibility</th>
-                  <th>Recommendation</th>
+                  <th>AI Recommendation</th>
+                  <th>Admin Decision</th>
                   <th>CGPA</th>
                   <th>Processed</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {applications.map((app, index) => (
-                  <tr key={index} className="application-row">
+                {applications.map((app, i) => (
+                  <tr key={i} className="application-row">
                     <td className="applicant-name">
-                      <div>
-                        <strong>{app.applicant_name}</strong>
-                        <small>{app.actor_id}</small>
-                      </div>
+                      <strong>{app.applicant_name}</strong>
+                      <small>{app.actor_id}</small>
                     </td>
                     <td>{app.application_number}</td>
-                    <td className="program-cell">
-                      <span className="program-name">{app.program}</span>
-                    </td>
+                    <td className="program-cell"><span className="program-name">{app.program}</span></td>
                     <td>
-                      <span 
-                        className="status-badge"
-                        style={{ backgroundColor: getStatusColor(app.eligibility_status) }}
-                      >
+                      <span className="status-badge" style={{ background: statusColor(app.eligibility_status) }}>
                         {app.eligibility_status}
                       </span>
                     </td>
                     <td>
-                      <span 
-                        className="recommendation-badge"
-                        style={{ backgroundColor: getRecommendationColor(app.final_recommendation) }}
-                      >
+                      <span className="recommendation-badge" style={{ background: recColor(app.final_recommendation) }}>
                         {app.final_recommendation}
                       </span>
+                    </td>
+                    <td>
+                      {app.admin_decision ? (
+                        <span className="recommendation-badge" style={{ background: app.admin_decision === 'APPROVED' ? '#10b981' : '#ef4444' }}>
+                          {app.admin_decision}
+                        </span>
+                      ) : (
+                        <span className="pending-decision-badge">Pending</span>
+                      )}
                     </td>
                     <td>
                       {app.academic_performance?.average_cgpa ? (
@@ -314,44 +449,25 @@ const Dashboard = () => {
                             <small>({app.academic_performance.converted_percentage}%)</small>
                           )}
                         </div>
-                      ) : (
-                        <span className="no-data">N/A</span>
-                      )}
+                      ) : <span className="no-data">N/A</span>}
                     </td>
-                    <td>{formatDate(app.processing_timestamp)}</td>
+                    <td>{fmtDate(app.processing_timestamp)}</td>
                     <td>
                       <div className="action-buttons">
-                        <button
-                          onClick={() => fetchApplicationDetails(app.actor_id, app.session_id)}
-                          className="action-btn details-btn"
-                          title="View Details"
-                        >
-                          <span className="btn-icon">👁️</span>
-                          <span className="btn-text">Details</span>
+                        <button onClick={() => loadDetail(app)} className="action-btn details-btn" title="Formatted Details">
+                          <span className="btn-icon">👁️</span><span className="btn-text">Details</span>
                         </button>
-                        <button
-                          onClick={() => viewApplicationJSON(app.actor_id, app.session_id)}
-                          className="action-btn json-btn"
-                          title="View JSON"
-                        >
-                          <span className="btn-icon">📄</span>
-                          <span className="btn-text">JSON</span>
+                        <button onClick={() => loadJson(app)} className="action-btn json-btn" title="Raw JSON">
+                          <span className="btn-icon">📄</span><span className="btn-text">JSON</span>
                         </button>
-                        <button
-                          onClick={() => viewMissingDocuments(app.actor_id, app.session_id)}
-                          className="action-btn missing-btn"
-                          title="Missing Documents"
-                        >
-                          <span className="btn-icon">📋</span>
-                          <span className="btn-text">Missing</span>
+                        <button onClick={() => loadMissing(app)} className="action-btn missing-btn" title="Missing Docs">
+                          <span className="btn-icon">📋</span><span className="btn-text">Missing</span>
                         </button>
-                        <button
-                          onClick={() => viewValidationResults(app.actor_id, app.session_id)}
-                          className="action-btn validation-btn"
-                          title="Validation Results"
-                        >
-                          <span className="btn-icon">✓</span>
-                          <span className="btn-text">Validate</span>
+                        <button onClick={() => loadValidation(app)} className="action-btn validation-btn" title="Validation">
+                          <span className="btn-icon">✓</span><span className="btn-text">Validate</span>
+                        </button>
+                        <button onClick={() => adminDecision(app)} className="action-btn decide-btn" title="Admin Decision">
+                          <span className="btn-icon">⚖️</span><span className="btn-text">Decide</span>
                         </button>
                       </div>
                     </td>
@@ -359,259 +475,173 @@ const Dashboard = () => {
                 ))}
               </tbody>
             </table>
-            
             {applications.length === 0 && (
-              <div className="no-applications">
-                <p>No applications found matching your criteria.</p>
-              </div>
+              <div className="no-applications"><p>No applications found.</p></div>
             )}
           </div>
         )}
       </div>
 
-      {/* Application Details Modal */}
-      {selectedApplication && (
-        <div className="modal-overlay" onClick={() => setSelectedApplication(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      {/* ── Details Modal (formatted) ── */}
+      {detailApp && (
+        <div className="modal-overlay" onClick={() => setDetailApp(null)}>
+          <div className="modal-content detail-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>📋 Application Details</h2>
-              <button className="modal-close" onClick={() => setSelectedApplication(null)}>×</button>
+              <h2>👁️ Application Details</h2>
+              <button className="modal-close" onClick={() => setDetailApp(null)}>×</button>
             </div>
             <div className="modal-body">
-              <pre className="json-display">{JSON.stringify(selectedApplication, null, 2)}</pre>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* JSON View Modal */}
-      {selectedApplicationJSON && (
-        <div className="modal-overlay" onClick={() => setSelectedApplicationJSON(null)}>
-          <div className="modal-content json-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>📄 Application JSON</h2>
-              <div className="modal-actions">
-                <button 
-                  className="copy-btn"
-                  onClick={() => {
-                    navigator.clipboard.writeText(JSON.stringify(selectedApplicationJSON, null, 2));
-                    alert('JSON copied to clipboard!');
-                  }}
-                >
-                  📋 Copy
-                </button>
-                <button 
-                  className="download-btn"
-                  onClick={() => {
-                    const blob = new Blob([JSON.stringify(selectedApplicationJSON, null, 2)], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `application_${selectedApplicationJSON.actor_id || 'data'}.json`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                  }}
-                >
-                  💾 Download
-                </button>
-                <button className="modal-close" onClick={() => setSelectedApplicationJSON(null)}>×</button>
-              </div>
-            </div>
-            <div className="modal-body">
-              <pre className="json-display">{JSON.stringify(selectedApplicationJSON, null, 2)}</pre>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Missing Documents Modal */}
-      {selectedMissingDocs && (
-        <div className="modal-overlay" onClick={() => setSelectedMissingDocs(null)}>
-          <div className="modal-content missing-docs-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>📋 Missing Documents Report</h2>
-              <div className="modal-actions">
-                <button 
-                  className="download-btn"
-                  onClick={() => {
-                    const reportText = `Missing Documents Report
-Generated: ${new Date().toLocaleString()}
-
-=== MISSING DOCUMENTS ===
-${selectedMissingDocs.missing_documents?.map((doc, index) => `${index + 1}. ${doc}`).join('\n') || 'No missing documents found'}
-
-=== AVAILABLE DOCUMENTS ===
-${selectedMissingDocs.available_documents?.map((doc, index) => `${index + 1}. ${doc}`).join('\n') || 'No available documents listed'}
-`;
-                    const blob = new Blob([reportText], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `missing_docs_report.txt`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                  }}
-                >
-                  💾 Download
-                </button>
-                <button className="modal-close" onClick={() => setSelectedMissingDocs(null)}>×</button>
-              </div>
-            </div>
-            <div className="modal-body">
-              <div className="missing-docs-content">
-                <div className="missing-docs-section">
-                  <h3>❌ Missing Documents</h3>
-                  {selectedMissingDocs.missing_documents && selectedMissingDocs.missing_documents.length > 0 ? (
-                    <ul className="missing-docs-list">
-                      {selectedMissingDocs.missing_documents.map((doc, index) => (
-                        <li key={index} className="missing-doc-item">
-                          <span className="missing-icon">❌</span>
-                          {doc}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <div className="no-missing-docs">
-                      <span className="success-icon">✅</span>
-                      All required documents are present
+              {(() => {
+                const fr = detailApp.data?.data?.final_response || {};
+                const stats = fr.processing_statistics || {};
+                return (
+                  <div className="detail-formatted">
+                    <div className="detail-section">
+                      <h3>Applicant</h3>
+                      <div className="detail-grid">
+                        <div><span>Name</span><strong>{fr.applicant_name || '—'}</strong></div>
+                        <div><span>Application #</span><strong>{fr.application_number || '—'}</strong></div>
+                        <div><span>Program</span><strong>{fr.program || '—'}</strong></div>
+                        <div><span>Processed</span><strong>{fr.processing_timestamp ? fmtDate(fr.processing_timestamp) : '—'}</strong></div>
+                      </div>
                     </div>
-                  )}
-                </div>
-
-                {selectedMissingDocs.available_documents && selectedMissingDocs.available_documents.length > 0 && (
-                  <div className="missing-docs-section available-docs-section">
-                    <h3>✅ Available Documents</h3>
-                    <ul className="available-docs-list">
-                      {selectedMissingDocs.available_documents.map((doc, index) => (
-                        <li key={index} className="available-doc-item">
-                          <span className="available-icon">✅</span>
-                          {doc}
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="detail-section">
+                      <h3>Assessment</h3>
+                      <div className="detail-grid">
+                        <div><span>Eligibility</span>
+                          <span className="status-badge" style={{ background: statusColor(fr.eligibility_status) }}>{fr.eligibility_status}</span>
+                        </div>
+                        <div><span>Validation</span><strong>{fr.validation_status}</strong></div>
+                        <div><span>Recommendation</span>
+                          <span className="recommendation-badge" style={{ background: recColor(fr.final_recommendation) }}>{fr.final_recommendation}</span>
+                        </div>
+                        <div><span>Confidence</span><strong>{fr.confidence_level}</strong></div>
+                        <div><span>Action Required</span><strong>{fr.action_required}</strong></div>
+                      </div>
+                    </div>
+                    <div className="detail-section">
+                      <h3>Academic Performance</h3>
+                      <div className="detail-grid">
+                        <div><span>Average CGPA</span><strong>{fr.academic_performance?.average_cgpa || 'N/A'}</strong></div>
+                        <div><span>Converted %</span><strong>{fr.academic_performance?.converted_percentage || 'N/A'}%</strong></div>
+                      </div>
+                    </div>
+                    <div className="detail-section">
+                      <h3>Processing Statistics</h3>
+                      <div className="detail-grid">
+                        <div><span>Docs Processed</span><strong>{stats.documents_processed}</strong></div>
+                        <div><span>Validation Matches</span><strong>{stats.validation_matches}</strong></div>
+                        <div><span>Critical Issues</span><strong style={{ color: '#ef4444' }}>{stats.critical_issues}</strong></div>
+                        <div><span>Minor Issues</span><strong style={{ color: '#f59e0b' }}>{stats.minor_issues}</strong></div>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
+                );
+              })()}
             </div>
           </div>
         </div>
       )}
 
-      {/* Validation Results Modal */}
-      {selectedValidationResults && (
-        <div className="modal-overlay" onClick={() => setSelectedValidationResults(null)}>
-          <div className="modal-content validation-results-modal" onClick={(e) => e.stopPropagation()}>
+      {/* ── JSON Modal ── */}
+      {jsonApp && (
+        <div className="modal-overlay" onClick={() => setJsonApp(null)}>
+          <div className="modal-content json-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>✓ Validation Results</h2>
+              <h2>📄 Raw JSON</h2>
               <div className="modal-actions">
-                <button 
-                  className="download-btn"
-                  onClick={() => {
-                    const reportText = `Validation Results Report
-Generated: ${new Date().toLocaleString()}
-
-=== VALIDATION SUMMARY ===
-Overall Status: ${selectedValidationResults.overall_status || 'UNKNOWN'}
-Total Matches: ${selectedValidationResults.matches?.length || 0}
-Total Discrepancies: ${selectedValidationResults.discrepancies?.length || 0}
-`;
-                    const blob = new Blob([reportText], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `validation_results.txt`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                  }}
-                >
-                  💾 Download
-                </button>
-                <button className="modal-close" onClick={() => setSelectedValidationResults(null)}>×</button>
+                <button className="copy-btn" onClick={() => { navigator.clipboard.writeText(JSON.stringify(jsonApp.data, null, 2)); alert('Copied!'); }}>📋 Copy</button>
+                <button className="download-btn" onClick={() => {
+                  const blob = new Blob([JSON.stringify(jsonApp.data, null, 2)], { type: 'application/json' });
+                  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `app_${jsonApp.app.application_number}.json` });
+                  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                }}>💾 Download</button>
+                <button className="modal-close" onClick={() => setJsonApp(null)}>×</button>
               </div>
             </div>
+            <div className="modal-body"><pre className="json-display">{JSON.stringify(jsonApp.data, null, 2)}</pre></div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Missing Docs Modal ── */}
+      {missingApp && (
+        <div className="modal-overlay" onClick={() => setMissingApp(null)}>
+          <div className="modal-content missing-docs-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>📋 Document Checklist</h2>
+              <button className="modal-close" onClick={() => setMissingApp(null)}>×</button>
+            </div>
             <div className="modal-body">
-              <div className="validation-results-content">
-                <div className="validation-section">
-                  <h3>📊 Validation Summary</h3>
-                  <div className="validation-summary-grid">
-                    <div className="summary-item">
-                      <span className="summary-label">Overall Status:</span>
-                      <span className={`summary-value ${selectedValidationResults.overall_status?.toLowerCase()}`}>
-                        {selectedValidationResults.overall_status || 'UNKNOWN'}
-                      </span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="summary-label">Total Matches:</span>
-                      <span className="summary-value matches">{selectedValidationResults.matches?.length || 0}</span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="summary-label">Discrepancies:</span>
-                      <span className="summary-value discrepancies">{selectedValidationResults.discrepancies?.length || 0}</span>
-                    </div>
+              {/* Progress bar */}
+              {missingApp.data.total_required > 0 && (
+                <div className="doc-progress-section">
+                  <div className="doc-progress-label">
+                    <span><strong>{missingApp.data.total_uploaded}</strong> of <strong>{missingApp.data.total_required}</strong> required documents uploaded</span>
+                    {missingApp.data.intake_name && <span className="intake-tag">{missingApp.data.intake_name}</span>}
+                  </div>
+                  <div className="doc-progress-bar">
+                    <div className="doc-progress-fill" style={{ width: `${(missingApp.data.total_uploaded / missingApp.data.total_required) * 100}%` }}/>
                   </div>
                 </div>
+              )}
 
-                {selectedValidationResults.matches && selectedValidationResults.matches.length > 0 && (
-                  <div className="validation-section matches-section">
-                    <h3>✅ Validation Matches</h3>
-                    <div className="validation-items">
-                      {selectedValidationResults.matches.map((match, index) => (
-                        <div key={index} className="validation-item match-item">
-                          <div className="validation-item-header">
-                            <span className="validation-icon">✅</span>
-                            <strong>{match.field}</strong>
-                          </div>
-                          <div className="validation-item-content">
-                            <div className="value-comparison">
-                              <span className="value-label">Application:</span>
-                              <span className="value-text">{match.application_value}</span>
-                            </div>
-                            <div className="value-comparison">
-                              <span className="value-label">Document:</span>
-                              <span className="value-text">{match.document_value}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+              {/* Two-column grid: Available | Missing */}
+              <div className="doc-checklist-grid">
+                {/* Available */}
+                {(missingApp.data.available_documents || []).map((d, i) => (
+                  <div key={`a${i}`} className="doc-checklist-item available">
+                    <span className="doc-check">✅</span>
+                    <span className="doc-name">{d}</span>
+                    <button className="doc-view-btn" onClick={() => {
+                      const typeMap = {
+                        'Application Form': 'main', '10th Marksheet': '10th_result',
+                        '12th Marksheet': '12th_result', 'Aadhaar Card': 'aadhar_card',
+                        'Bachelor Marksheet': 'bachelor_result',
+                        'Bachelor Degree Certificate': 'bachelor_degree_certificate',
+                        'Work Experience Letter': 'work_experience',
+                        'Entrance Exam Scorecard': 'entrance_exam',
+                      };
+                      const docType = typeMap[d] || d.toLowerCase().replace(/ /g,'_');
+                      fetch(`${API_BASE}/api/applications/${missingApp.app.actor_id}/${missingApp.app.session_id}/view-doc?doc_type=${docType}`)
+                        .then(r => r.json())
+                        .then(data => { if (data.url) window.open(data.url, '_blank'); else alert('Could not load document'); })
+                        .catch(() => alert('Error loading document'));
+                    }}>View</button>
                   </div>
-                )}
-
-                {selectedValidationResults.discrepancies && selectedValidationResults.discrepancies.length > 0 && (
-                  <div className="validation-section discrepancies-section">
-                    <h3>❌ Discrepancies</h3>
-                    <div className="validation-items">
-                      {selectedValidationResults.discrepancies.map((disc, index) => (
-                        <div key={index} className="validation-item discrepancy-item">
-                          <div className="validation-item-header">
-                            <span className="validation-icon">❌</span>
-                            <strong>{disc.field}</strong>
-                          </div>
-                          <div className="validation-item-content">
-                            <div className="value-comparison">
-                              <span className="value-label">Application:</span>
-                              <span className="value-text">{disc.application_value}</span>
-                            </div>
-                            <div className="value-comparison">
-                              <span className="value-label">Document:</span>
-                              <span className="value-text">{disc.document_value}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                ))}
+                {/* Missing */}
+                {(missingApp.data.missing_documents || []).map((d, i) => (
+                  <div key={`m${i}`} className="doc-checklist-item missing">
+                    <span className="doc-check">❌</span>
+                    <span className="doc-name">{d}</span>
+                    <span className="doc-status-tag missing-tag">Not Uploaded</span>
                   </div>
-                )}
+                ))}
+                {/* Extra */}
+                {(missingApp.data.extra_documents || []).map((d, i) => (
+                  <div key={`e${i}`} className="doc-checklist-item extra">
+                    <span className="doc-check">⚠️</span>
+                    <span className="doc-name">{d}</span>
+                    <span className="doc-status-tag extra-tag">Not Required</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Validation Modal ── */}
+      {validateApp && <ValidationModal app={validateApp.app} data={validateApp.data} onClose={() => setValidateApp(null)} />}
+
+      {/* ── Admin Decision Modal ── */}
+      {decisionApp && (
+        <DecisionModal
+          app={decisionApp}
+          onClose={() => setDecisionApp(null)}
+          onSaved={() => { fetchApplications(); fetchDashboard(); if (onDecision) onDecision(); }}
+        />
       )}
     </div>
   );

@@ -3,16 +3,23 @@ import { useAuthenticator } from '@aws-amplify/ui-react';
 import { Navigate } from 'react-router-dom';
 import Dashboard from './Dashboard';
 import BatchFileUploader from './BatchFileUploader';
+import Intakes from './Intakes';
+import IntakeDetail from './IntakeDetail';
 import './SmartDocuments.css';
 
 const SmartDocuments = () => {
   const { user } = useAuthenticator();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab]       = useState('dashboard');
+  const [refreshKey, setRefreshKey]     = useState(0);
+  const [selectedIntake, setSelectedIntake] = useState(null);
   const actorId = user?.username || `actor_${Date.now()}`;
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!user) return <Navigate to="/login" replace />;
+
+  const handleDecision = () => setRefreshKey(k => k + 1);
+
+  const handleSelectIntake = (intake) => setSelectedIntake(intake);
+  const handleBackToIntakes = () => setSelectedIntake(null);
 
   return (
     <div className="smart-documents-app">
@@ -47,6 +54,18 @@ const SmartDocuments = () => {
             </svg>
             Dashboard
           </button>
+
+          <button 
+            className={`smart-documents-nav-tab ${activeTab === 'intakes' ? 'active' : ''}`}
+            onClick={() => setActiveTab('intakes')}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 11l3 3L22 4"/>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+            Intakes
+          </button>
+
           <button 
             className={`smart-documents-nav-tab ${activeTab === 'upload' ? 'active' : ''}`}
             onClick={() => setActiveTab('upload')}
@@ -62,8 +81,10 @@ const SmartDocuments = () => {
       </header>
       
       <main className="smart-documents-main-content">
-        {activeTab === 'dashboard' && <Dashboard />}
-        {activeTab === 'upload' && <BatchFileUploader actorId={actorId} />}
+        {activeTab === 'dashboard' && <Dashboard onDecision={handleDecision} />}
+        {activeTab === 'intakes'   && !selectedIntake && <Intakes refreshKey={refreshKey} onSelectIntake={handleSelectIntake} />}
+        {activeTab === 'intakes'   && selectedIntake  && <IntakeDetail intake={selectedIntake} onBack={handleBackToIntakes} onDecision={handleDecision} />}
+        {activeTab === 'upload'    && <BatchFileUploader actorId={actorId} />}
       </main>
     </div>
   );

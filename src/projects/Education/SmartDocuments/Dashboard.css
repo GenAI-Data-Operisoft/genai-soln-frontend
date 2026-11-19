@@ -470,109 +470,39 @@
   display: block;
 }
 
-/* Enhanced Action Buttons - 2x2 Grid */
+/* ── Action buttons — compact horizontal row ── */
 .action-buttons {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  min-width: 180px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 200px;
 }
 
 .action-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 4px;
+  padding: 5px 10px;
   border: none;
-  border-radius: 8px;
-  font-size: 12px;
+  border-radius: 6px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: opacity 0.15s, transform 0.15s;
   color: white;
-  position: relative;
-  overflow: hidden;
+  white-space: nowrap;
 }
+.action-btn:hover  { opacity: 0.88; transform: translateY(-1px); }
+.action-btn:active { transform: translateY(0); }
 
-.action-btn::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
-  transform: translate(-50%, -50%);
-  transition: width 0.3s, height 0.3s;
-}
+.btn-icon { font-size: 12px; }
+.btn-text { font-size: 11px; }
 
-.action-btn:hover::before {
-  width: 200px;
-  height: 200px;
-}
-
-.action-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.action-btn:active {
-  transform: translateY(0);
-}
-
-.btn-icon {
-  font-size: 14px;
-  position: relative;
-  z-index: 1;
-}
-
-.btn-text {
-  position: relative;
-  z-index: 1;
-}
-
-/* Button Color Variants */
-.details-btn {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-}
-
-.details-btn:hover {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-}
-
-.json-btn {
-  background: linear-gradient(135deg, #10b981, #059669);
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-}
-
-.json-btn:hover {
-  background: linear-gradient(135deg, #059669, #047857);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-}
-
-.missing-btn {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
-}
-
-.missing-btn:hover {
-  background: linear-gradient(135deg, #d97706, #b45309);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
-}
-
-.validation-btn {
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
-}
-
-.validation-btn:hover {
-  background: linear-gradient(135deg, #7c3aed, #6d28d9);
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
-}
+.details-btn    { background: #3b82f6; }
+.json-btn       { background: #10b981; }
+.missing-btn    { background: #f59e0b; }
+.validation-btn { background: #8b5cf6; }
+.decide-btn     { background: #0f172a; }
 
 /* Remove old button styles */
 .view-details-btn,
@@ -1559,3 +1489,176 @@
     min-width: auto;
   }
 }
+
+/* ── Pending decision badge ── */
+.pending-decision-badge {
+  background: #f1f5f9; color: #64748b;
+  padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+}
+
+/* ── Source document badge in validation ── */
+.source-doc-badge {
+  background: #eff6ff; color: #3b82f6; border: 1px solid #bfdbfe;
+  padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 500; margin-left: 8px;
+}
+.severity-badge {
+  color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem;
+  font-weight: 700; margin-left: 8px;
+}
+
+/* ── Admin Decision Modal ── */
+.decision-modal { max-width: 520px !important; }
+
+.decision-applicant-info {
+  background: #f8fafc; border-radius: 10px; padding: 16px;
+  margin-bottom: 20px; display: flex; flex-direction: column; gap: 6px;
+}
+.decision-applicant-info strong {
+  font-size: 1rem; font-weight: 700; color: #1e293b;
+}
+.decision-applicant-info span {
+  font-size: 0.85rem; color: #64748b; display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+}
+.rec-badge {
+  color: #fff; padding: 2px 10px; border-radius: 20px;
+  font-size: 0.75rem; font-weight: 700;
+}
+
+.decision-buttons {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;
+}
+.decision-btn {
+  padding: 14px; border: 2px solid transparent; border-radius: 10px;
+  font-size: 0.95rem; font-weight: 700; cursor: pointer;
+  transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.approve-btn {
+  background: #f0fdf4; color: #16a34a; border-color: #bbf7d0;
+}
+.approve-btn:hover, .approve-btn.selected {
+  background: #16a34a; color: #fff; border-color: #16a34a;
+}
+.reject-btn {
+  background: #fef2f2; color: #dc2626; border-color: #fecaca;
+}
+.reject-btn:hover, .reject-btn.selected {
+  background: #dc2626; color: #fff; border-color: #dc2626;
+}
+
+.rejection-reasons {
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+  padding: 14px; margin-bottom: 16px;
+}
+.reasons-label {
+  display: block; font-size: 0.85rem; font-weight: 600; color: #374151; margin-bottom: 10px;
+}
+.reason-checkbox {
+  display: flex; align-items: flex-start; gap: 8px; padding: 6px 0;
+  font-size: 0.83rem; color: #374151; cursor: pointer; line-height: 1.4;
+}
+.reason-checkbox input { accent-color: #dc2626; margin-top: 2px; flex-shrink: 0; }
+.reason-checkbox em { color: #94a3b8; font-size: 0.8rem; }
+
+.comment-section { margin-top: 4px; }
+.comment-label { display: block; font-size: 0.85rem; font-weight: 600; color: #374151; margin-bottom: 6px; }
+.comment-textarea {
+  width: 100%; padding: 10px 12px; border: 1.5px solid #e2e8f0;
+  border-radius: 8px; font-size: 0.88rem; resize: vertical; outline: none;
+  font-family: inherit; transition: border-color 0.2s; box-sizing: border-box;
+}
+.comment-textarea:focus { border-color: #4f46e5; }
+
+.modal-footer {
+  display: flex; gap: 10px; padding: 16px 24px;
+  border-top: 1px solid #e2e8f0; background: #f8fafc;
+  border-radius: 0 0 12px 12px;
+}
+.submit-decision-btn {
+  flex: 1; background: #4f46e5; color: #fff; border: none;
+  border-radius: 8px; padding: 11px; font-size: 0.95rem;
+  font-weight: 700; cursor: pointer; transition: background 0.2s;
+}
+.submit-decision-btn:hover:not(:disabled) { background: #4338ca; }
+.submit-decision-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cancel-decision-btn {
+  background: #f1f5f9; color: #374151; border: none;
+  border-radius: 8px; padding: 11px 20px; font-size: 0.95rem;
+  font-weight: 600; cursor: pointer;
+}
+
+/* ── Detail formatted view ── */
+.detail-formatted { display: flex; flex-direction: column; gap: 20px; }
+.detail-section h3 { font-size: 0.9rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.detail-grid > div { background: #f8fafc; border-radius: 8px; padding: 10px 12px; }
+.detail-grid span { font-size: 0.75rem; color: #94a3b8; display: block; margin-bottom: 2px; }
+.detail-grid strong { font-size: 0.9rem; color: #1e293b; }
+
+/* ── Validation modal improvements ── */
+.value-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+.value-label { font-size: 0.75rem; color: #94a3b8; min-width: 80px; }
+.app-value { color: #374151; }
+.doc-value { color: #374151; }
+.disc-description { font-size: 0.78rem; color: #ef4444; margin: 4px 0 0; }
+
+/* ── Clear search button ── */
+.clear-search-btn {
+  background: #f1f5f9; border: none; border-radius: 8px;
+  padding: 8px 12px; cursor: pointer; color: #64748b; font-size: 0.9rem;
+}
+
+/* ── Missing docs intake summary ── */
+.intake-doc-summary {
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 16px; font-size: 0.88rem; color: #1e40af;
+}
+
+/* ── Document Checklist redesign ── */
+.doc-progress-section { margin-bottom: 20px; }
+.doc-progress-label {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.88rem; color: #374151; margin-bottom: 8px;
+}
+.intake-tag {
+  background: #eff6ff; color: #3b82f6; border: 1px solid #bfdbfe;
+  padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+}
+.doc-progress-bar {
+  height: 8px; background: #e2e8f0; border-radius: 99px; overflow: hidden;
+}
+.doc-progress-fill {
+  height: 100%; background: linear-gradient(90deg, #10b981, #34d399);
+  border-radius: 99px; transition: width 0.4s ease;
+}
+
+.doc-checklist-grid { display: flex; flex-direction: column; gap: 8px; }
+.doc-checklist-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  border-radius: 8px; font-size: 0.88rem;
+}
+.doc-checklist-item.available { background: #f0fdf4; border: 1px solid #bbf7d0; }
+.doc-checklist-item.missing   { background: #fef2f2; border: 1px solid #fecaca; }
+.doc-checklist-item.extra     { background: #fffbeb; border: 1px solid #fde68a; }
+.doc-check  { font-size: 1rem; flex-shrink: 0; }
+.doc-name   { flex: 1; color: #1e293b; font-weight: 500; }
+.doc-view-btn {
+  background: #3b82f6; color: #fff; border: none; border-radius: 6px;
+  padding: 4px 12px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  flex-shrink: 0; transition: background 0.15s;
+}
+.doc-view-btn:hover { background: #2563eb; }
+.doc-status-tag {
+  font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; flex-shrink: 0;
+}
+.missing-tag { background: #fee2e2; color: #dc2626; }
+.extra-tag   { background: #fef3c7; color: #92400e; }
+
+/* ── Reason blocks in validation modal ── */
+.reason-block-modal {
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
+  font-size: 0.88rem;
+}
+.rec-reason-modal  { background: #f0f9ff; border: 1px solid #bae6fd; }
+.elig-pass-modal   { background: #f0fdf4; border: 1px solid #bbf7d0; }
+.elig-fail-modal   { background: #fef2f2; border: 1px solid #fecaca; }
